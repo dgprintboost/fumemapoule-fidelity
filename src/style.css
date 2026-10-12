@@ -1,0 +1,76 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/inter/900.css';
+@import '@fontsource/cinzel/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .page {
+    @apply font-sans bg-main-gradient bg-fmp-bg text-fmp-cream min-h-[100svh] flex items-center justify-center p-4;
+  }
+
+  .shell {
+    @apply bg-glass-gradient backdrop-blur-[20px] shadow-[0_40px_100px_rgba(0,0,0,0.5)] w-full max-w-[480px] rounded-[35px] border border-fmp-kraft/25 p-6 flex flex-col relative overflow-hidden;
+  }
+
+  /* Feuilles de CBD en filigrane : derrière le contenu (le flou de .shell crée le contexte d'empilement). */
+  .shell::before,
+  .shell::after {
+    content: '';
+    @apply absolute w-56 h-56 bg-no-repeat bg-contain opacity-[0.07] pointer-events-none -z-10;
+    background-image: url('./assets/leaf.svg');
+  }
+
+  .shell::before {
+    @apply -top-10 -right-14 rotate-[25deg];
+  }
+
+  .shell::after {
+    @apply -bottom-12 -left-16 rotate-[200deg];
+  }
+
+  .brand-logo {
+    @apply w-24 h-24 rounded-full bg-fmp-green border-2 border-fmp-kraft shadow-[0_0_25px_rgba(192,138,78,0.35)] overflow-hidden;
+  }
+
+  .brand-title {
+    @apply text-center font-serif text-3xl font-bold tracking-wide text-fmp-cream leading-tight;
+  }
+
+  .pill {
+    @apply bg-fmp-kraft/10 border border-fmp-kraft/30 px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest text-fmp-kraft;
+  }
+
+  .field-label {
+    @apply text-[10px] text-fmp-sage/80 font-bold uppercase tracking-widest;
+  }
+
+  .field {
+    @apply w-full bg-fmp-tile border border-fmp-cream/10 rounded-xl px-4 py-3 text-sm text-fmp-cream placeholder:text-fmp-cream/30 focus:outline-none focus:border-fmp-kraft transition-colors;
+  }
+
+  .btn-primary {
+    @apply w-full bg-fmp-kraft hover:bg-fmp-kraft-dark text-fmp-bg text-xs font-black uppercase py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply w-full bg-fmp-green/40 border border-fmp-sage/30 rounded-xl py-3 text-xs font-black uppercase text-fmp-cream flex items-center justify-center gap-2 shadow-xl transition-all active:scale-95;
+  }
+
+  .stamp {
+    @apply aspect-square rounded-full border-2 border-dashed border-fmp-sage/20 flex items-center justify-center text-lg font-black text-fmp-cream/20 bg-center bg-no-repeat bg-[length:70%];
+  }
+
+  /* Tampon validé : le numéro laisse place à une feuille de CBD. */
+  .stamp-on {
+    @apply border-solid border-fmp-kraft bg-fmp-green/60 text-[0px] shadow-[0_0_15px_rgba(192,138,78,0.35)];
+    background-image: url('./assets/leaf.svg');
+  }
+
+  .footer-note {
+    @apply text-center mt-6 opacity-40 text-[9px] font-bold uppercase tracking-widest;
+  }
+}

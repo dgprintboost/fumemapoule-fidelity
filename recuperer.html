@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f1f15">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <title>Fume Ma Poule · Retrouver ma carte</title>
+</head>
+<body class="page">
+  <main class="shell gap-6">
+    <header class="flex flex-col items-center gap-3 animate-fade-in-up">
+      <div class="brand-logo">
+        <img src="/src/assets/logo-fumemapoule.jpg" alt="Fume Ma Poule — CBD shop" class="w-full h-full object-cover rounded-full">
+      </div>
+      <h1 class="brand-title">Fume Ma Poule</h1>
+      <p class="pill">Retrouver ma carte</p>
+    </header>
+
+    <p class="text-sm text-fmp-cream/60 text-center animate-fade-in-up [animation-delay:0.1s]">
+      Saisis le code de secours affiché sur ta carte (par exemple <span class="font-mono text-fmp-cream">K7P2-QX9M-4T</span>).
+    </p>
+
+    <form id="recoverForm" class="flex flex-col gap-4 animate-fade-in-up [animation-delay:0.2s]" novalidate>
+      <label class="flex flex-col gap-1.5">
+        <span class="field-label">Code de secours</span>
+        <input id="recoveryInput" name="code" class="field font-mono uppercase tracking-widest" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="14" required>
+      </label>
+      <p id="recoverError" class="text-xs text-fmp-rust min-h-4" role="alert"></p>
+      <button id="recoverBtn" class="btn-primary" type="submit">Retrouver ma carte</button>
+    </form>
+
+    <a href="./index.html" class="btn-secondary">Créer une nouvelle carte</a>
+
+    <p class="footer-note">Fume Ma Poule • Naturel &amp; bien-être</p>
+  </main>
+
+  <script type="module" src="/src/pages/recuperer.js"></script>
+</body>
+</html>
