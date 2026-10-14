@@ -7,6 +7,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Palette fmp-* (tailwind.config.js) en triplets RVB. Carte verte = identité d'origine. */
+@layer base {
+  :root {
+    --fmp-bg: 15 31 21; /* #0f1f15 */
+    --fmp-green: 40 70 55; /* #284637 */
+    --fmp-kraft: 192 138 78; /* #c08a4e */
+    --fmp-kraft-dark: 160 112 60; /* #a0703c */
+    --fmp-sage: 168 198 154; /* #a8c69a */
+    --fmp-cream: 243 234 216; /* #f3ead8 */
+    --fmp-rust: 227 139 109; /* #e38b6d */
+    --fmp-tile: 26 48 34; /* #1a3022 */
+    --fmp-glass-top: 22 41 29;
+    --fmp-glass-bottom: 17 33 23;
+    --fmp-leaf: url('./assets/leaf.svg');
+  }
+
+  /* Carte bleue (page carte) : même design, chaque teinte verte / kraft a son équivalent bleu ciel. */
+  .theme-blue {
+    --fmp-bg: 12 26 38; /* #0c1a26 */
+    --fmp-green: 31 74 99; /* #1f4a63 */
+    --fmp-kraft: 142 202 230; /* #8ecae6 */
+    --fmp-kraft-dark: 95 168 204; /* #5fa8cc */
+    --fmp-sage: 169 214 236; /* #a9d6ec */
+    --fmp-tile: 22 41 58; /* #16293a */
+    --fmp-glass-top: 18 36 52;
+    --fmp-glass-bottom: 14 29 43;
+    --fmp-leaf: url('./assets/leaf-blue.svg');
+  }
+}
+
 @layer components {
   .page {
     @apply font-sans bg-main-gradient bg-fmp-bg text-fmp-cream min-h-[100svh] flex items-center justify-center p-4;
@@ -21,7 +51,7 @@
   .shell::after {
     content: '';
     @apply absolute w-56 h-56 bg-no-repeat bg-contain opacity-[0.07] pointer-events-none -z-10;
-    background-image: url('./assets/leaf.svg');
+    background-image: var(--fmp-leaf);
   }
 
   .shell::before {
@@ -33,7 +63,8 @@
   }
 
   .brand-logo {
-    @apply w-24 h-24 rounded-full bg-fmp-green border-2 border-fmp-kraft shadow-[0_0_25px_rgba(192,138,78,0.35)] overflow-hidden;
+    @apply w-24 h-24 rounded-full bg-fmp-green border-2 border-fmp-kraft overflow-hidden;
+    box-shadow: 0 0 25px rgb(var(--fmp-kraft) / 0.35);
   }
 
   .brand-title {
@@ -66,14 +97,9 @@
 
   /* Tampon validé : le numéro laisse place à une feuille de CBD. */
   .stamp-on {
-    @apply border-solid border-fmp-kraft bg-fmp-green/60 text-[0px] shadow-[0_0_15px_rgba(192,138,78,0.35)];
-    background-image: url('./assets/leaf.svg');
-  }
-
-  /* Carte bleue : même tampon, couleur bleu ciel. */
-  .card-blue .stamp-on {
-    @apply border-fmp-sky bg-fmp-sky-deep/60 shadow-[0_0_15px_rgba(142,202,230,0.35)];
-    background-image: url('./assets/leaf-blue.svg');
+    @apply border-solid border-fmp-kraft bg-fmp-green/60 text-[0px];
+    box-shadow: 0 0 15px rgb(var(--fmp-kraft) / 0.35);
+    background-image: var(--fmp-leaf);
   }
 
   .card-tab {
@@ -82,10 +108,6 @@
 
   .card-tab[aria-selected='true'] {
     @apply bg-fmp-green border-fmp-kraft text-fmp-cream;
-  }
-
-  .card-tab.tab-blue[aria-selected='true'] {
-    @apply bg-fmp-sky-deep border-fmp-sky text-fmp-cream;
   }
 
   /* Pastille de la carte scannée dans l'espace équipe. */

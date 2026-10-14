@@ -4,16 +4,18 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Couleurs lues dans des variables CSS (src/style.css) : la carte bleue redéfinit les variables
+        // (classe theme-blue sur <html>) et toute la page change de couleur avec le même design.
         fmp: {
-          bg: '#0f1f15',
-          green: '#284637',
-          kraft: '#c08a4e',
-          'kraft-dark': '#a0703c',
-          sage: '#a8c69a',
-          cream: '#f3ead8',
-          rust: '#e38b6d',
-          tile: '#1a3022',
-          // Carte bleue : même design que la verte, seule la couleur change.
+          bg: 'rgb(var(--fmp-bg) / <alpha-value>)',
+          green: 'rgb(var(--fmp-green) / <alpha-value>)',
+          kraft: 'rgb(var(--fmp-kraft) / <alpha-value>)',
+          'kraft-dark': 'rgb(var(--fmp-kraft-dark) / <alpha-value>)',
+          sage: 'rgb(var(--fmp-sage) / <alpha-value>)',
+          cream: 'rgb(var(--fmp-cream) / <alpha-value>)',
+          rust: 'rgb(var(--fmp-rust) / <alpha-value>)',
+          tile: 'rgb(var(--fmp-tile) / <alpha-value>)',
+          // Couleurs fixes de la carte bleue, pour la signaler dans l'espace équipe (resté vert).
           sky: '#8ecae6',
           'sky-deep': '#1f4a63',
         },
@@ -24,8 +26,8 @@ export default {
       },
       backgroundImage: {
         'main-gradient':
-          'radial-gradient(circle at top right, rgba(192, 138, 78, 0.18), transparent 45%), radial-gradient(circle at bottom left, rgba(40, 70, 55, 0.5), transparent 50%)',
-        'glass-gradient': 'linear-gradient(180deg, rgba(22, 41, 29, 0.96), rgba(17, 33, 23, 0.98))',
+          'radial-gradient(circle at top right, rgb(var(--fmp-kraft) / 0.18), transparent 45%), radial-gradient(circle at bottom left, rgb(var(--fmp-green) / 0.5), transparent 50%)',
+        'glass-gradient': 'linear-gradient(180deg, rgb(var(--fmp-glass-top) / 0.96), rgb(var(--fmp-glass-bottom) / 0.98))',
       },
       animation: {
         'fade-in-up': 'fadeInUp 0.6s ease both',

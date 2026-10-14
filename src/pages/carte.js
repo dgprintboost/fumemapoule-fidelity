@@ -22,6 +22,9 @@ const rewardBannerText = document.getElementById('rewardBannerText')
 const rewardText = document.getElementById('rewardText')
 const cardPanel = document.getElementById('cardPanel')
 const tabs = [...document.querySelectorAll('[role="tab"][data-card]')]
+const themeColorMeta = document.querySelector('meta[name="theme-color"]')
+// Fond de page de chaque carte (--fmp-bg dans src/style.css), pour la barre du navigateur.
+const THEME_COLORS = { green: '#0f1f15', blue: '#0c1a26' }
 const qrCanvas = document.getElementById('cardQr')
 const recoveryCodeEl = document.getElementById('recoveryCode')
 const errorEl = document.getElementById('cardError')
@@ -52,7 +55,9 @@ if (!cardId) {
 
 function render() {
   const { label, reward } = CARDS[color]
-  cardPanel.classList.toggle('card-blue', color === 'blue')
+  // Toute la page prend la couleur de la carte sélectionnée (variables CSS de src/style.css).
+  document.documentElement.classList.toggle('theme-blue', color === 'blue')
+  themeColorMeta?.setAttribute('content', THEME_COLORS[color])
   rewardText.textContent = reward
   rewardBannerText.textContent = reward
   stampCardLabel.textContent = `${label} : `
