@@ -2,7 +2,7 @@
 // (/assets/*, dont le nom change à chaque build). Les pages HTML et les requêtes Firebase passent
 // toujours par le réseau : les tampons affichés viennent de Firestore, jamais d'un cache.
 // Le suffixe du nom de cache est remplacé au build (vite.config.js) : chaque mise en ligne purge l'ancien cache.
-const CACHE = 'fidelity-assets-68f7c49d2b2b'
+const CACHE = 'fidelity-assets-0d3055f7eed2'
 
 self.addEventListener('install', () => self.skipWaiting())
 

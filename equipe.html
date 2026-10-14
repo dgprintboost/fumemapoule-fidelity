@@ -6,9 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex">
   <title>Fume Ma Poule · Espace équipe</title>
-  <script type="module" crossorigin src="/fumemapoule-fidelity/assets/equipe-BF7dcRMz.js"></script>
-  <link rel="modulepreload" crossorigin href="/fumemapoule-fidelity/assets/firebase-BPvufi1S.js">
-  <link rel="stylesheet" crossorigin href="/fumemapoule-fidelity/assets/firebase-QBkU6OkR.css">
+  <script type="module" crossorigin src="/fumemapoule-fidelity/assets/equipe-_0sBa9IS.js"></script>
+  <link rel="modulepreload" crossorigin href="/fumemapoule-fidelity/assets/firebase-D3I1vE6M.js">
+  <link rel="modulepreload" crossorigin href="/fumemapoule-fidelity/assets/cards-guyGRgrn.js">
+  <link rel="stylesheet" crossorigin href="/fumemapoule-fidelity/assets/firebase-CFmqPsAj.css">
 </head>
 <body class="page">
   <main class="shell gap-6">
@@ -44,10 +45,13 @@
       <button id="scanBtn" class="btn-secondary" type="button">Scanner une carte</button>
 
       <div id="scanResult" class="hidden bg-fmp-cream/5 border border-fmp-cream/10 rounded-xl p-4 flex-col gap-3" aria-live="polite">
+        <!-- Carte choisie par le client (indicateur du QR) : seule celle-ci reçoit le tampon ou le cadeau. -->
+        <p id="cardBadge" class="card-badge"></p>
         <div class="flex items-baseline justify-between">
           <p id="clientName" class="text-lg font-black"></p>
           <p class="text-sm font-black"><span id="clientStamps">0</span>/10</p>
         </div>
+        <p class="text-[12px] text-fmp-cream/70">10 tampons = <span id="cardReward" class="font-bold text-fmp-cream"></span></p>
         <button id="stampBtn" class="btn-primary" type="button">+1 tampon</button>
         <button id="rewardBtn" class="hidden btn-primary" type="button">🎁 Cadeau remis</button>
       </div>
