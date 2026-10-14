@@ -36,6 +36,7 @@ async function createCard(uid, firstName) {
       ownerUid: uid,
       firstName,
       stamps: 0,
+      stampsBlue: 0,
       lastStamp: null,
       createdAt: serverTimestamp(),
     })

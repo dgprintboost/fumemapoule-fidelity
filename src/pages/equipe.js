@@ -2,16 +2,14 @@ import '../style.css'
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { collection, doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore'
 import QrScanner from 'qr-scanner'
+import { CARDS, STAMPS_FOR_REWARD, parseQrPayload, stampsOf } from '../lib/cards.js'
 import { STAFF_APP_NAME, initFirebase } from '../lib/firebase.js'
 
 // Instance Firebase propre à l'espace équipe : sa connexion ne touche jamais l'identité anonyme du client.
 const { auth, db } = initFirebase(STAFF_APP_NAME)
 
-const STAMPS_FOR_REWARD = 10
 const COOLDOWN_MS = 60 * 60 * 1000
 const SLOW_NETWORK_MS = 10_000
-// Identifiant Firestore généré automatiquement : 20 caractères alphanumériques.
-const CARD_ID_PATTERN = /^[A-Za-z0-9]{20}$/
 
 const loginForm = document.getElementById('loginForm')
 const emailInput = document.getElementById('email')
@@ -25,13 +23,15 @@ const scanBtn = document.getElementById('scanBtn')
 const scanResult = document.getElementById('scanResult')
 const clientName = document.getElementById('clientName')
 const clientStamps = document.getElementById('clientStamps')
+const cardBadge = document.getElementById('cardBadge')
+const cardReward = document.getElementById('cardReward')
 const stampBtn = document.getElementById('stampBtn')
 const rewardBtn = document.getElementById('rewardBtn')
 const staffMessage = document.getElementById('staffMessage')
 const logoutBtn = document.getElementById('logoutBtn')
 
 let scanner = null
-let current = null // { id, data } de la carte scannée
+let current = null // { id, color, data } : carte scannée et couleur choisie par le client (QR)
 
 function setVisible(element, visible) {
   element.classList.toggle('hidden', !visible)
@@ -135,20 +135,21 @@ scanBtn.addEventListener('click', async () => {
 
 async function onScan(data) {
   scanner.stop()
-  if (!CARD_ID_PATTERN.test(data)) {
+  const scanned = parseQrPayload(data)
+  if (!scanned) {
     resetScan()
     say("Ce QR code n'est pas une carte de fidélité.", true)
     return
   }
   try {
-    await loadCard(data)
+    await loadCard(scanned.id, scanned.color)
   } catch {
     say('Impossible de lire cette carte. Réessaie.', true)
   }
 }
 
 // Affiche la carte ; renvoie true si c'est bien elle qui est affichée à la fin de la lecture.
-async function loadCard(id) {
+async function loadCard(id, color) {
   const seq = ++loadSeq
   let snapshot
   try {
@@ -165,13 +166,18 @@ async function loadCard(id) {
     say('Carte introuvable.', true)
     return false
   }
-  current = { id, data: snapshot.data() }
+  current = { id, color, data: snapshot.data() }
   renderCard()
   return true
 }
 
 function renderCard() {
-  const { stamps, lastStamp, firstName } = current.data
+  const { color, data } = current
+  const { lastStamp, firstName } = data
+  const stamps = stampsOf(data, color)
+  scanResult.classList.toggle('card-blue', color === 'blue')
+  cardBadge.textContent = CARDS[color].label
+  cardReward.textContent = CARDS[color].reward
   clientName.textContent = firstName
   clientStamps.textContent = String(stamps)
   setVisible(scanResult, true)
@@ -184,18 +190,18 @@ function renderCard() {
   rewardBtn.classList.toggle('hidden', !full)
   rewardBtn.disabled = false
 
-  if (full) say('Carte pleine : remets le cadeau puis valide.')
-  else if (tooSoon) say('Déjà tamponnée il y a moins d’une heure.', true)
+  if (full) say(`${CARDS[color].label} pleine : remets « ${CARDS[color].reward} » puis valide.`)
+  else if (tooSoon) say('Déjà tamponnée il y a moins d’une heure (cartes verte et bleue confondues).', true)
 }
 
 // --- Tampon et cadeau ------------------------------------------------------
 
-// Modifie la carte et journalise l'événement dans le même batch (exigé par les règles).
-async function commitCardChange(cardId, type, changes) {
+// Modifie la carte et journalise l'événement (avec la carte concernée) dans le même batch (exigé par les règles).
+async function commitCardChange(cardId, color, type, changes) {
   const cardRef = doc(db, 'cards', cardId)
   const eventRef = doc(collection(cardRef, 'history'))
   const batch = writeBatch(db)
-  batch.set(eventRef, { type, at: serverTimestamp(), staffUid: auth.currentUser.uid })
+  batch.set(eventRef, { type, card: color, at: serverTimestamp(), staffUid: auth.currentUser.uid })
   batch.update(cardRef, { ...changes, lastEventId: eventRef.id })
   await batch.commit()
 }
@@ -204,7 +210,7 @@ async function commitCardChange(cardId, type, changes) {
 // jusqu'à la fin du rafraîchissement : le résultat ne peut pas être attribué à une autre carte.
 async function runAction(button, buildChanges, type, successText) {
   if (!current) return
-  const { id, data } = current
+  const { id, color, data } = current
   for (const control of [button, scanBtn, logoutBtn]) control.disabled = true
   say('Envoi en cours…')
   // Hors ligne, l'envoi reste en attente au lieu d'échouer : prévenir plutôt que laisser l'écran figé.
@@ -212,13 +218,13 @@ async function runAction(button, buildChanges, type, successText) {
 
   let failure = null
   try {
-    await commitCardChange(id, type, buildChanges(data))
+    await commitCardChange(id, color, type, buildChanges(data, color))
   } catch (error) {
     failure = error
   }
   clearTimeout(slowTimer)
 
-  const refreshed = await refresh(id)
+  const refreshed = await refresh(id, color)
   scanBtn.disabled = false
   logoutBtn.disabled = false
   if (!refreshed) {
@@ -227,7 +233,7 @@ async function runAction(button, buildChanges, type, successText) {
   }
 
   if (!failure) {
-    say(refreshed ? successText(current.data) : `${successText(null)} Rescanne la carte pour la revoir.`)
+    say(refreshed ? successText(current) : `${successText(null)} Rescanne la carte pour la revoir.`)
     return
   }
   const reason =
@@ -238,10 +244,10 @@ async function runAction(button, buildChanges, type, successText) {
 }
 
 // Recharge la carte affichée ; renvoie false si la lecture échoue.
-async function refresh(id) {
-  if (current?.id !== id) return false
+async function refresh(id, color) {
+  if (current?.id !== id || current.color !== color) return false
   try {
-    return await loadCard(id)
+    return await loadCard(id, color)
   } catch {
     return false
   }
@@ -250,12 +256,21 @@ async function refresh(id) {
 stampBtn.addEventListener('click', () =>
   runAction(
     stampBtn,
-    (card) => ({ stamps: card.stamps + 1, lastStamp: serverTimestamp() }),
+    // Un seul compteur change : celui de la carte choisie par le client.
+    (data, color) => ({ [CARDS[color].field]: stampsOf(data, color) + 1, lastStamp: serverTimestamp() }),
     'stamp',
-    (card) => (card ? `Tampon ajouté ✔ (${card.stamps}/10)` : 'Tampon ajouté ✔'),
+    (card) =>
+      card
+        ? `Tampon ajouté ✔ ${CARDS[card.color].label} : ${stampsOf(card.data, card.color)}/10`
+        : 'Tampon ajouté ✔',
   ),
 )
 
 rewardBtn.addEventListener('click', () =>
-  runAction(rewardBtn, () => ({ stamps: 0 }), 'reward', () => 'Cadeau remis 🎁 La carte repart à 0.'),
+  runAction(
+    rewardBtn,
+    (_, color) => ({ [CARDS[color].field]: 0 }),
+    'reward',
+    (card) => (card ? `Cadeau remis 🎁 ${CARDS[card.color].label} repart à 0.` : 'Cadeau remis 🎁'),
+  ),
 )

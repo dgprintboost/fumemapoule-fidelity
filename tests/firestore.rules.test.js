@@ -30,8 +30,9 @@ const staff = () => env.authenticatedContext('staff1', { firebase: { sign_in_pro
 const alice = () => anon('alice')
 const bob = () => anon('bob')
 
-// Données de départ écrites sans les règles.
-async function seed({ stamps = 0, lastStamp = null, extraHistory = false } = {}) {
+// Données de départ écrites sans les règles. Sans stampsBlue, la carte imite une carte créée
+// avant l'arrivée de la carte bleue (champ absent).
+async function seed({ stamps = 0, stampsBlue, lastStamp = null, extraHistory = false } = {}) {
   await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore()
     await setDoc(doc(db, 'staff/staff1'), { name: 'Gérant' })
@@ -45,6 +46,7 @@ async function seed({ stamps = 0, lastStamp = null, extraHistory = false } = {})
         ownerUid: owner,
         firstName: owner,
         stamps,
+        ...(stampsBlue === undefined ? {} : { stampsBlue }),
         lastStamp: lastStamp === null ? null : Timestamp.fromMillis(lastStamp),
         createdAt: Timestamp.now(),
       })
@@ -54,6 +56,7 @@ async function seed({ stamps = 0, lastStamp = null, extraHistory = false } = {})
     if (extraHistory) {
       await setDoc(doc(db, 'cards', CARD, 'history', 'oldEvent'), {
         type: extraHistory === true ? 'stamp' : extraHistory,
+        card: 'green',
         at: Timestamp.fromMillis(Date.now() - 3 * HOUR),
         staffUid: 'staff1',
       })
@@ -62,11 +65,17 @@ async function seed({ stamps = 0, lastStamp = null, extraHistory = false } = {})
 }
 
 // Tamponnage / cadeau tel que le fait l'espace équipe : carte + événement d'historique dans le même batch.
-function cardChange(db, { type = 'stamp', changes, staffUid = 'staff1', cardId = CARD, eventId, eventExtra = {} } = {}) {
+// card: null retire le champ card de l'événement.
+function cardChange(
+  db,
+  { type = 'stamp', card = 'green', changes, staffUid = 'staff1', cardId = CARD, eventId, eventExtra = {} } = {},
+) {
   const cardRef = doc(db, 'cards', cardId)
   const eventRef = eventId ? doc(cardRef, 'history', eventId) : doc(collection(cardRef, 'history'))
   const batch = writeBatch(db)
-  batch.set(eventRef, { type, at: serverTimestamp(), staffUid, ...eventExtra })
+  const event = { type, card, at: serverTimestamp(), staffUid, ...eventExtra }
+  if (card === null) delete event.card
+  batch.set(eventRef, event)
   batch.update(cardRef, { ...changes, lastEventId: eventRef.id })
   return batch.commit()
 }
@@ -87,7 +96,15 @@ function signup(
   } = {},
 ) {
   const cardRef = doc(db, 'cards', cardId)
-  const cardData = { ownerUid: uid, firstName: 'Dave', stamps: 0, lastStamp: null, createdAt: serverTimestamp(), ...card }
+  const cardData = {
+    ownerUid: uid,
+    firstName: 'Dave',
+    stamps: 0,
+    stampsBlue: 0,
+    lastStamp: null,
+    createdAt: serverTimestamp(),
+    ...card,
+  }
   for (const key of omit) delete cardData[key]
   const batch = writeBatch(db)
   batch.set(cardRef, cardData)
@@ -121,6 +138,14 @@ describe('Inscription (création de carte)', () => {
 
   it('refuse une carte qui commence avec des tampons', async () => {
     await assertFails(signup(anon('dave'), { card: { stamps: 1 } }))
+  })
+
+  it('refuse une carte qui commence avec des tampons bleus', async () => {
+    await assertFails(signup(anon('dave'), { card: { stampsBlue: 1 } }))
+  })
+
+  it('refuse une carte neuve sans compteur bleu', async () => {
+    await assertFails(signup(anon('dave'), { omit: ['stampsBlue'] }))
   })
 
   it('refuse une carte créée au nom de quelqu’un d’autre', async () => {
@@ -264,6 +289,7 @@ describe('Lecture et cloisonnement', () => {
     await env.withSecurityRulesDisabled((context) =>
       setDoc(doc(context.firestore(), 'cards', CARD, 'history', 'ev'), {
         type: 'stamp',
+        card: 'green',
         at: Timestamp.now(),
         staffUid: 'staff1',
       }),
@@ -277,7 +303,12 @@ describe('Lecture et cloisonnement', () => {
       updateDoc(doc(context.firestore(), 'cards', CARD), { lastEventId: 'ghost' }),
     )
     await assertFails(
-      setDoc(doc(alice(), 'cards', CARD, 'history', 'ghost'), { type: 'stamp', at: serverTimestamp(), staffUid: 'alice' }),
+      setDoc(doc(alice(), 'cards', CARD, 'history', 'ghost'), {
+        type: 'stamp',
+        card: 'green',
+        at: serverTimestamp(),
+        staffUid: 'alice',
+      }),
     )
   })
 
@@ -380,7 +411,12 @@ describe('Tampons', () => {
   it('refuse un événement d’historique isolé, sans modification de la carte', async () => {
     await seed({ stamps: 3 })
     await assertFails(
-      setDoc(doc(staff(), 'cards', CARD, 'history', 'lonely'), { type: 'stamp', at: serverTimestamp(), staffUid: 'staff1' }),
+      setDoc(doc(staff(), 'cards', CARD, 'history', 'lonely'), {
+        type: 'stamp',
+        card: 'green',
+        at: serverTimestamp(),
+        staffUid: 'staff1',
+      }),
     )
   })
 
@@ -433,6 +469,132 @@ describe('Cadeau', () => {
   it('un client ne peut pas remettre sa carte à zéro', async () => {
     await seed({ stamps: 10 })
     await assertFails(cardChange(alice(), { type: 'reward', changes: { stamps: 0 }, staffUid: 'alice' }))
+  })
+})
+
+describe('Carte bleue (tampons)', () => {
+  const blueStamp = (db, changes = {}, options = {}) =>
+    cardChange(db, { card: 'blue', changes: { stampsBlue: 4, lastStamp: serverTimestamp(), ...changes }, ...options })
+
+  it('l’équipe ajoute un tampon bleu journalisé', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertSucceeds(blueStamp(staff()))
+  })
+
+  it('une carte créée avant la carte bleue reçoit son premier tampon bleu (compteur absent = 0)', async () => {
+    await seed({ stamps: 3 })
+    await assertSucceeds(blueStamp(staff(), { stampsBlue: 1 }))
+  })
+
+  it('délai partagé : refuse un tampon bleu moins d’une heure après un tampon vert', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertSucceeds(cardChange(staff(), { changes: { stamps: 4, lastStamp: serverTimestamp() } }))
+    await assertFails(blueStamp(staff()))
+  })
+
+  it('délai partagé : refuse un tampon vert moins d’une heure après un tampon bleu', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertSucceeds(blueStamp(staff()))
+    await assertFails(cardChange(staff(), { changes: { stamps: 4, lastStamp: serverTimestamp() } }))
+  })
+
+  it('l’équipe ajoute un tampon bleu plus d’une heure après le précédent', async () => {
+    await seed({ stamps: 3, stampsBlue: 3, lastStamp: Date.now() - 2 * HOUR })
+    await assertSucceeds(blueStamp(staff()))
+  })
+
+  it('refuse +2 tampons bleus d’un coup', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertFails(blueStamp(staff(), { stampsBlue: 5 }))
+  })
+
+  it('refuse un tampon bleu au-delà de 10', async () => {
+    await seed({ stamps: 3, stampsBlue: 10 })
+    await assertFails(blueStamp(staff(), { stampsBlue: 11 }))
+  })
+
+  it('refuse +1 sur les deux compteurs à la fois (journalisé vert ou bleu)', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    const both = { stamps: 4, stampsBlue: 4, lastStamp: serverTimestamp() }
+    await assertFails(cardChange(staff(), { card: 'green', changes: both }))
+    await assertFails(cardChange(staff(), { card: 'blue', changes: both }))
+  })
+
+  it('refuse un tampon bleu journalisé sur la carte verte', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertFails(blueStamp(staff(), {}, { card: 'green' }))
+  })
+
+  it('refuse un tampon vert journalisé sur la carte bleue', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertFails(cardChange(staff(), { card: 'blue', changes: { stamps: 4, lastStamp: serverTimestamp() } }))
+  })
+
+  it('refuse un tampon bleu qui ne met pas à jour la date du dernier tampon', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertFails(cardChange(staff(), { card: 'blue', changes: { stampsBlue: 4 } }))
+  })
+
+  it('refuse un tampon bleu journalisé comme cadeau', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertFails(blueStamp(staff(), {}, { type: 'reward' }))
+  })
+
+  it('refuse un événement d’historique sans carte', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertFails(blueStamp(staff(), {}, { card: null }))
+  })
+
+  it('refuse un événement d’historique sur une carte inconnue', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertFails(blueStamp(staff(), {}, { card: 'red' }))
+  })
+
+  it('un client ne peut pas se tamponner la carte bleue', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertFails(blueStamp(alice(), {}, { staffUid: 'alice' }))
+  })
+})
+
+describe('Carte bleue (cadeau)', () => {
+  const blueReward = (db, changes = { stampsBlue: 0 }, options = {}) =>
+    cardChange(db, { type: 'reward', card: 'blue', changes, ...options })
+
+  it('l’équipe remet le cadeau bleu sur une carte bleue pleine, sans toucher la verte', async () => {
+    await seed({ stamps: 7, stampsBlue: 10 })
+    await assertSucceeds(blueReward(staff()))
+    const card = await getDoc(doc(staff(), 'cards', CARD))
+    if (card.data().stamps !== 7 || card.data().stampsBlue !== 0) throw new Error('compteurs inattendus')
+  })
+
+  it('refuse le cadeau bleu sur une carte bleue qui n’est pas pleine', async () => {
+    await seed({ stamps: 10, stampsBlue: 9 })
+    await assertFails(blueReward(staff()))
+  })
+
+  it('refuse le cadeau bleu sur une carte créée avant la carte bleue (compteur absent = 0)', async () => {
+    await seed({ stamps: 10 })
+    await assertFails(blueReward(staff()))
+  })
+
+  it('refuse un cadeau bleu qui remet aussi la carte verte à zéro', async () => {
+    await seed({ stamps: 10, stampsBlue: 10 })
+    await assertFails(blueReward(staff(), { stampsBlue: 0, stamps: 0 }))
+  })
+
+  it('refuse un cadeau bleu qui ne remet pas la carte bleue à zéro', async () => {
+    await seed({ stamps: 3, stampsBlue: 10 })
+    await assertFails(blueReward(staff(), { stampsBlue: 5 }))
+  })
+
+  it('refuse un cadeau bleu journalisé sur la carte verte', async () => {
+    await seed({ stamps: 3, stampsBlue: 10 })
+    await assertFails(blueReward(staff(), { stampsBlue: 0 }, { card: 'green' }))
+  })
+
+  it('un client ne peut pas remettre sa carte bleue à zéro', async () => {
+    await seed({ stamps: 3, stampsBlue: 10 })
+    await assertFails(blueReward(alice(), { stampsBlue: 0 }, { staffUid: 'alice' }))
   })
 })
 

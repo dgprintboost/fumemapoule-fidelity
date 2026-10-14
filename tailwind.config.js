@@ -13,6 +13,9 @@ export default {
           cream: '#f3ead8',
           rust: '#e38b6d',
           tile: '#1a3022',
+          // Carte bleue : même design que la verte, seule la couleur change.
+          sky: '#8ecae6',
+          'sky-deep': '#1f4a63',
         },
       },
       fontFamily: {

@@ -70,6 +70,33 @@
     background-image: url('./assets/leaf.svg');
   }
 
+  /* Carte bleue : même tampon, couleur bleu ciel. */
+  .card-blue .stamp-on {
+    @apply border-fmp-sky bg-fmp-sky-deep/60 shadow-[0_0_15px_rgba(142,202,230,0.35)];
+    background-image: url('./assets/leaf-blue.svg');
+  }
+
+  .card-tab {
+    @apply flex-1 rounded-full py-2 text-[10px] font-black uppercase tracking-widest border border-fmp-cream/10 text-fmp-cream/50 transition-colors;
+  }
+
+  .card-tab[aria-selected='true'] {
+    @apply bg-fmp-green border-fmp-kraft text-fmp-cream;
+  }
+
+  .card-tab.tab-blue[aria-selected='true'] {
+    @apply bg-fmp-sky-deep border-fmp-sky text-fmp-cream;
+  }
+
+  /* Pastille de la carte scannée dans l'espace équipe. */
+  .card-badge {
+    @apply self-start rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest border bg-fmp-green border-fmp-kraft text-fmp-cream;
+  }
+
+  .card-blue .card-badge {
+    @apply bg-fmp-sky-deep border-fmp-sky;
+  }
+
   .footer-note {
     @apply text-center mt-6 opacity-40 text-[9px] font-bold uppercase tracking-widest;
   }

@@ -1,14 +1,27 @@
 import '../style.css'
 import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import QRCode from 'qrcode'
-import { db, clearStoredCardId, ensureClientUser, getStoredCardId } from '../lib/client.js'
+import { CARDS, isCardColor, qrPayload, stampsOf } from '../lib/cards.js'
+import {
+  db,
+  clearStoredCardId,
+  ensureClientUser,
+  getLastCardColor,
+  getStoredCardId,
+  storeLastCardColor,
+} from '../lib/client.js'
 import { isIos, isStandalone, registerServiceWorker } from '../lib/pwa.js'
 import { formatRecoveryCode } from '../lib/recovery-code.js'
 
 const greetingEl = document.getElementById('greeting')
 const stampCountEl = document.getElementById('stampCount')
+const stampCardLabel = document.getElementById('stampCardLabel')
 const stampEls = [...document.querySelectorAll('#stamps .stamp')]
 const rewardBanner = document.getElementById('rewardBanner')
+const rewardBannerText = document.getElementById('rewardBannerText')
+const rewardText = document.getElementById('rewardText')
+const cardPanel = document.getElementById('cardPanel')
+const tabs = [...document.querySelectorAll('[role="tab"][data-card]')]
 const qrCanvas = document.getElementById('cardQr')
 const recoveryCodeEl = document.getElementById('recoveryCode')
 const errorEl = document.getElementById('cardError')
@@ -22,17 +35,76 @@ registerServiceWorker()
 setupInstallInvite()
 
 const cardId = getStoredCardId()
+// Dernière carte consultée ; au premier lancement (ou valeur inconnue), la verte.
+let color = isCardColor(getLastCardColor()) ? getLastCardColor() : 'green'
+let cardData = null // dernier état de la carte reçu de Firestore
+let qrReady = false // le QR n'est dessiné qu'une fois la session client ouverte
+let qrError = false // dernier dessin du QR en échec : le message reste affiché tant qu'il n'est pas redessiné
+const QR_ERROR_TEXT = 'Impossible d’afficher le QR code. Recharge la page.'
+
 if (!cardId) {
   location.replace('./index.html')
 } else {
+  setupTabs()
+  selectCard(color)
   showCard(cardId)
 }
 
-function render(card) {
-  greetingEl.textContent = `Carte de ${card.firstName}`
-  stampCountEl.textContent = String(card.stamps)
-  stampEls.forEach((el, index) => el.classList.toggle('stamp-on', index < card.stamps))
-  rewardBanner.classList.toggle('hidden', card.stamps < 10)
+function render() {
+  const { label, reward } = CARDS[color]
+  cardPanel.classList.toggle('card-blue', color === 'blue')
+  rewardText.textContent = reward
+  rewardBannerText.textContent = reward
+  stampCardLabel.textContent = `${label} : `
+  qrCanvas.setAttribute('aria-label', `QR code de ma ${label.toLowerCase()}`)
+  if (!cardData) return
+  const stamps = stampsOf(cardData, color)
+  greetingEl.textContent = `Carte de ${cardData.firstName}`
+  stampCountEl.textContent = String(stamps)
+  stampEls.forEach((el, index) => el.classList.toggle('stamp-on', index < stamps))
+  rewardBanner.classList.toggle('hidden', stamps < 10)
+}
+
+// Le QR désigne la carte sélectionnée : l'équipe tamponnera celle-ci.
+// QRCode.toCanvas dessine de façon synchrone : deux changements d'onglet rapides ne peuvent pas se croiser.
+async function drawQr() {
+  if (!qrReady) return
+  try {
+    await QRCode.toCanvas(qrCanvas, qrPayload(cardId, color), { width: 200, margin: 1 })
+    if (qrError && errorEl.textContent === QR_ERROR_TEXT) showError('')
+    qrError = false
+  } catch {
+    // Jamais l'ancien QR sous un autre onglet : l'équipe tamponnerait la mauvaise carte.
+    qrCanvas.getContext('2d')?.clearRect(0, 0, qrCanvas.width, qrCanvas.height)
+    qrError = true
+    showError(QR_ERROR_TEXT)
+  }
+}
+
+function selectCard(next) {
+  color = next
+  storeLastCardColor(color)
+  for (const tab of tabs) {
+    const selected = tab.dataset.card === color
+    tab.setAttribute('aria-selected', String(selected))
+    tab.tabIndex = selected ? 0 : -1
+    if (selected) cardPanel.setAttribute('aria-labelledby', tab.id)
+  }
+  render()
+  drawQr()
+}
+
+// Onglets accessibles : clic, ou flèches gauche / droite quand un onglet a le focus.
+function setupTabs() {
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => selectCard(tab.dataset.card))
+    tab.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      const next = tabs[(index + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]
+      next.focus()
+      selectCard(next.dataset.card)
+    })
+  })
 }
 
 function showError(text, offerRecovery = false) {
@@ -52,12 +124,13 @@ newCardBtn.addEventListener('click', () => {
 async function showCard(id) {
   try {
     await ensureClientUser()
-    // Le QR ne contient que l'identifiant de la carte : c'est l'équipe qui tamponne.
-    await QRCode.toCanvas(qrCanvas, id, { width: 200, margin: 1 })
   } catch {
     showError('Impossible de charger ta carte. Vérifie ta connexion puis recharge la page.')
     return
   }
+  // Le QR ne contient que l'identifiant de la carte et sa couleur : c'est l'équipe qui tamponne.
+  qrReady = true
+  await drawQr()
 
   onSnapshot(
     doc(db, 'cards', id),
@@ -74,8 +147,10 @@ async function showCard(id) {
         showError("Cette carte n'existe plus. Utilise ton code de secours ou crée une nouvelle carte.", true)
         return
       }
-      showError('')
-      render(snapshot.data())
+      // Une mise à jour de la carte n'efface pas l'erreur du QR, qu'elle n'a pas réglée.
+      showError(qrError ? QR_ERROR_TEXT : '')
+      cardData = snapshot.data()
+      render()
     },
     (error) => {
       // permission-denied est ambigu (carte reprise ailleurs, mais aussi App Check ou session passagère) :

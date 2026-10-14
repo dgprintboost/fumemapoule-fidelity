@@ -22,6 +22,25 @@ export function storeCardId(cardId) {
   localStorage.setItem(CARD_KEY, cardId)
 }
 
+// Dernière carte consultée (verte ou bleue) : simple confort d'affichage, sans aucun droit.
+const LAST_COLOR_KEY = `fidelity:${import.meta.env.VITE_FIREBASE_PROJECT_ID}:lastCard`
+
+export function getLastCardColor() {
+  try {
+    return localStorage.getItem(LAST_COLOR_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function storeLastCardColor(color) {
+  try {
+    localStorage.setItem(LAST_COLOR_KEY, color)
+  } catch {
+    // Stockage indisponible : la carte verte s'affichera au prochain lancement.
+  }
+}
+
 export function clearStoredCardId() {
   try {
     localStorage.removeItem(CARD_KEY)

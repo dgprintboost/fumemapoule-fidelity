@@ -4,8 +4,12 @@ rules_version = '2';
 //
 // Modèle de données
 //   staff/{uid}                     compte équipe (créé à la main dans la console, jamais depuis le site)
-//   cards/{cardId}                  { ownerUid, firstName, stamps, lastStamp, createdAt, lastEventId?, recoveredWith? }
-//   cards/{cardId}/history/{id}     { type: 'stamp' | 'reward', at, staffUid }   journal, jamais modifié ni lu depuis le site
+//   cards/{cardId}                  { ownerUid, firstName, stamps, stampsBlue, lastStamp, createdAt, lastEventId?, recoveredWith? }
+//   cards/{cardId}/history/{id}     { type: 'stamp' | 'reward', card: 'green' | 'blue', at, staffUid }
+//                                   journal, jamais modifié ni lu depuis le site
+//
+// Deux cartes sur le même document : verte = stamps, bleue = stampsBlue (absent sur les cartes créées
+// avant la carte bleue : lu comme 0). Chacune va de 0 à 10 ; le délai d'une heure (lastStamp) est commun.
 //   cards/{cardId}/private/recovery { code }                                     code de la carte, lisible par son seul propriétaire
 //   recovery/{code}                 { cardId }                                   code de secours, 10 caractères
 //
@@ -51,25 +55,37 @@ service cloud.firestore {
         return getAfter(/databases/$(database)/documents/cards/$(cardId)/history/$(request.resource.data.lastEventId)).data;
       }
 
-      // +1 tampon exactement, au plus un par heure, journalisé.
-      function isStamp() {
-        return changedKeys().hasOnly(['stamps', 'lastStamp', 'lastEventId'])
-          && resource.data.stamps < 10
-          && request.resource.data.stamps == resource.data.stamps + 1
+      // Compteur de la carte verte ('stamps') ou bleue ('stampsBlue', 0 s'il n'existe pas encore).
+      function counter(data, field) {
+        return data.get(field, 0);
+      }
+
+      // +1 tampon exactement sur UN seul compteur, au plus un par heure toutes cartes confondues
+      // (lastStamp commun), journalisé avec la carte tamponnée.
+      function isStamp(field, card) {
+        return changedKeys().hasOnly([field, 'lastStamp', 'lastEventId'])
+          && counter(resource.data, field) < 10
+          && request.resource.data[field] == counter(resource.data, field) + 1
           && request.resource.data.lastStamp == request.time
           && (resource.data.lastStamp == null
               || request.time > resource.data.lastStamp + duration.value(1, 'h'))
           && newEvent().type == 'stamp'
+          && newEvent().card == card
           && newEvent().at == request.time;
       }
 
-      // Remise du cadeau : uniquement sur une carte pleine, remise à 0, journalisée.
-      function isReward() {
-        return changedKeys().hasOnly(['stamps', 'lastEventId'])
-          && resource.data.stamps == 10
-          && request.resource.data.stamps == 0
+      // Remise du cadeau : uniquement sur une carte pleine, remise à 0 de cette carte seule, journalisée.
+      function isReward(field, card) {
+        return changedKeys().hasOnly([field, 'lastEventId'])
+          && counter(resource.data, field) == 10
+          && request.resource.data[field] == 0
           && newEvent().type == 'reward'
+          && newEvent().card == card
           && newEvent().at == request.time;
+      }
+
+      function isCardChange(field, card) {
+        return isStamp(field, card) || isReward(field, card);
       }
 
       // Changement de téléphone : la carte passe au nouvel uid anonyme sur présentation du code de secours.
@@ -90,18 +106,19 @@ service cloud.firestore {
       // La carte, son code de secours (recovery/{code}) et sa copie privée (private/recovery)
       // sont créés ensemble, dans le même batch.
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['ownerUid', 'firstName', 'stamps', 'lastStamp', 'createdAt'])
-        && request.resource.data.keys().hasAll(['ownerUid', 'firstName', 'stamps', 'lastStamp', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['ownerUid', 'firstName', 'stamps', 'stampsBlue', 'lastStamp', 'createdAt'])
+        && request.resource.data.keys().hasAll(['ownerUid', 'firstName', 'stamps', 'stampsBlue', 'lastStamp', 'createdAt'])
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.firstName is string
         && request.resource.data.firstName.size() > 0
         && request.resource.data.firstName.size() <= 40
         && request.resource.data.stamps == 0
+        && request.resource.data.stampsBlue == 0
         && request.resource.data.lastStamp == null
         && request.resource.data.createdAt == request.time
         && existsAfter(/databases/$(database)/documents/cards/$(cardId)/private/recovery);
 
-      allow update: if (isStaff() && (isStamp() || isReward())) || isRecovery();
+      allow update: if (isStaff() && (isCardChange('stamps', 'green') || isCardChange('stampsBlue', 'blue'))) || isRecovery();
       allow delete: if false;
 
       // Code de secours de la carte : l'équipe ne le voit jamais (pas de fuite de tous les codes via un compte équipe).
@@ -123,8 +140,9 @@ service cloud.firestore {
 
         // Un événement n'existe que s'il accompagne la modification de la carte qui le référence.
         allow create: if isStaff()
-          && request.resource.data.keys().hasOnly(['type', 'at', 'staffUid'])
+          && request.resource.data.keys().hasOnly(['type', 'card', 'at', 'staffUid'])
           && request.resource.data.type in ['stamp', 'reward']
+          && request.resource.data.card in ['green', 'blue']
           && request.resource.data.at == request.time
           && request.resource.data.staffUid == request.auth.uid
           && getAfter(cardPath(cardId)).data.lastEventId == eventId;
