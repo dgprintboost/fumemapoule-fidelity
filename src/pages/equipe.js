@@ -8,7 +8,6 @@ import { STAFF_APP_NAME, initFirebase } from '../lib/firebase.js'
 // Instance Firebase propre à l'espace équipe : sa connexion ne touche jamais l'identité anonyme du client.
 const { auth, db } = initFirebase(STAFF_APP_NAME)
 
-const COOLDOWN_MS = 60 * 60 * 1000
 const SLOW_NETWORK_MS = 10_000
 
 const loginForm = document.getElementById('loginForm')
@@ -31,7 +30,7 @@ const staffMessage = document.getElementById('staffMessage')
 const logoutBtn = document.getElementById('logoutBtn')
 
 let scanner = null
-let current = null // { id, color, data } : carte scannée et couleur choisie par le client (QR)
+let current = null // { id, color, data, stamped } : carte scannée, couleur choisie par le client (QR), déjà tamponnée pendant ce scan
 
 function setVisible(element, visible) {
   element.classList.toggle('hidden', !visible)
@@ -149,7 +148,8 @@ async function onScan(data) {
 }
 
 // Affiche la carte ; renvoie true si c'est bien elle qui est affichée à la fin de la lecture.
-async function loadCard(id, color) {
+// stamped = un tampon vient d'être ajouté pendant ce scan : le bouton reste bloqué jusqu'au prochain scan.
+async function loadCard(id, color, stamped = false) {
   const seq = ++loadSeq
   let snapshot
   try {
@@ -166,14 +166,14 @@ async function loadCard(id, color) {
     say('Carte introuvable.', true)
     return false
   }
-  current = { id, color, data: snapshot.data() }
+  current = { id, color, data: snapshot.data(), stamped }
   renderCard()
   return true
 }
 
 function renderCard() {
-  const { color, data } = current
-  const { lastStamp, firstName } = data
+  const { color, data, stamped } = current
+  const { firstName } = data
   const stamps = stampsOf(data, color)
   scanResult.classList.toggle('card-blue', color === 'blue')
   cardBadge.textContent = CARDS[color].label
@@ -183,15 +183,13 @@ function renderCard() {
   setVisible(scanResult, true)
 
   const full = stamps >= STAMPS_FOR_REWARD
-  // Indication seulement : le délai d'une heure est imposé par les règles Firestore.
-  const tooSoon = lastStamp && Date.now() - lastStamp.toMillis() < COOLDOWN_MS
   stampBtn.classList.toggle('hidden', full)
-  stampBtn.disabled = Boolean(tooSoon)
+  // Pas de délai serveur entre deux tampons : un seul tampon par scan évite le double appui et le QR rescanné.
+  stampBtn.disabled = Boolean(stamped)
   rewardBtn.classList.toggle('hidden', !full)
   rewardBtn.disabled = false
 
   if (full) say(`${CARDS[color].label} pleine : remets « ${CARDS[color].reward} » puis valide.`)
-  else if (tooSoon) say('Déjà tamponnée il y a moins d’une heure (cartes verte et bleue confondues).', true)
 }
 
 // --- Tampon et cadeau ------------------------------------------------------
@@ -210,7 +208,7 @@ async function commitCardChange(cardId, color, type, changes) {
 // jusqu'à la fin du rafraîchissement : le résultat ne peut pas être attribué à une autre carte.
 async function runAction(button, buildChanges, type, successText) {
   if (!current) return
-  const { id, color, data } = current
+  const { id, color, data, stamped } = current
   for (const control of [button, scanBtn, logoutBtn]) control.disabled = true
   say('Envoi en cours…')
   // Hors ligne, l'envoi reste en attente au lieu d'échouer : prévenir plutôt que laisser l'écran figé.
@@ -224,7 +222,8 @@ async function runAction(button, buildChanges, type, successText) {
   }
   clearTimeout(slowTimer)
 
-  const refreshed = await refresh(id, color)
+  // Après un tampon réussi, le bouton reste bloqué : un autre tampon exige un nouveau scan.
+  const refreshed = await refresh(id, color, stamped || (!failure && type === 'stamp'))
   scanBtn.disabled = false
   logoutBtn.disabled = false
   if (!refreshed) {
@@ -244,10 +243,10 @@ async function runAction(button, buildChanges, type, successText) {
 }
 
 // Recharge la carte affichée ; renvoie false si la lecture échoue.
-async function refresh(id, color) {
+async function refresh(id, color, stamped) {
   if (current?.id !== id || current.color !== color) return false
   try {
-    return await loadCard(id, color)
+    return await loadCard(id, color, stamped)
   } catch {
     return false
   }
@@ -261,7 +260,8 @@ stampBtn.addEventListener('click', () =>
     'stamp',
     (card) =>
       card
-        ? `Tampon ajouté ✔ ${CARDS[card.color].label} : ${stampsOf(card.data, card.color)}/10`
+        ? `Tampon ajouté ✔ ${CARDS[card.color].label} : ${stampsOf(card.data, card.color)}/10.` +
+          (stampsOf(card.data, card.color) < STAMPS_FOR_REWARD ? ' Rescanne la carte pour un autre tampon.' : '')
         : 'Tampon ajouté ✔',
   ),
 )

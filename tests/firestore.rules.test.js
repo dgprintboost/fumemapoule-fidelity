@@ -346,13 +346,20 @@ describe('Tampons', () => {
     await assertSucceeds(stamp(staff()))
   })
 
-  it('l’équipe ajoute un tampon plus d’une heure après le précédent', async () => {
-    await seed({ stamps: 3, lastStamp: Date.now() - 2 * HOUR })
+  it('sans délai : accepte un tampon juste après le précédent', async () => {
+    await seed({ stamps: 3, lastStamp: Date.now() - 1000 })
     await assertSucceeds(stamp(staff()))
   })
 
-  it('refuse un deuxième tampon moins d’une heure après le précédent', async () => {
-    await seed({ stamps: 3, lastStamp: Date.now() - 10 * 60 * 1000 })
+  it('sans délai : accepte deux tampons de suite sur la même carte', async () => {
+    await seed({ stamps: 3 })
+    await assertSucceeds(stamp(staff()))
+    await assertSucceeds(stamp(staff(), { stamps: 5 }))
+  })
+
+  it('double clic : refuse un deuxième envoi calculé sur l’ancien compteur', async () => {
+    await seed({ stamps: 3 })
+    await assertSucceeds(stamp(staff()))
     await assertFails(stamp(staff()))
   })
 
@@ -486,21 +493,28 @@ describe('Carte bleue (tampons)', () => {
     await assertSucceeds(blueStamp(staff(), { stampsBlue: 1 }))
   })
 
-  it('délai partagé : refuse un tampon bleu moins d’une heure après un tampon vert', async () => {
+  it('sans délai : accepte un tampon bleu juste après un tampon vert', async () => {
     await seed({ stamps: 3, stampsBlue: 3 })
     await assertSucceeds(cardChange(staff(), { changes: { stamps: 4, lastStamp: serverTimestamp() } }))
-    await assertFails(blueStamp(staff()))
+    await assertSucceeds(blueStamp(staff()))
   })
 
-  it('délai partagé : refuse un tampon vert moins d’une heure après un tampon bleu', async () => {
+  it('sans délai : accepte un tampon vert juste après un tampon bleu', async () => {
     await seed({ stamps: 3, stampsBlue: 3 })
     await assertSucceeds(blueStamp(staff()))
-    await assertFails(cardChange(staff(), { changes: { stamps: 4, lastStamp: serverTimestamp() } }))
+    await assertSucceeds(cardChange(staff(), { changes: { stamps: 4, lastStamp: serverTimestamp() } }))
   })
 
-  it('l’équipe ajoute un tampon bleu plus d’une heure après le précédent', async () => {
-    await seed({ stamps: 3, stampsBlue: 3, lastStamp: Date.now() - 2 * HOUR })
+  it('sans délai : accepte deux tampons bleus de suite', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
     await assertSucceeds(blueStamp(staff()))
+    await assertSucceeds(blueStamp(staff(), { stampsBlue: 5 }))
+  })
+
+  it('double clic : refuse un deuxième envoi bleu calculé sur l’ancien compteur', async () => {
+    await seed({ stamps: 3, stampsBlue: 3 })
+    await assertSucceeds(blueStamp(staff()))
+    await assertFails(blueStamp(staff()))
   })
 
   it('refuse +2 tampons bleus d’un coup', async () => {

@@ -9,7 +9,7 @@ rules_version = '2';
 //                                   journal, jamais modifié ni lu depuis le site
 //
 // Deux cartes sur le même document : verte = stamps, bleue = stampsBlue (absent sur les cartes créées
-// avant la carte bleue : lu comme 0). Chacune va de 0 à 10 ; le délai d'une heure (lastStamp) est commun.
+// avant la carte bleue : lu comme 0). Chacune va de 0 à 10 ; lastStamp = date du dernier tampon (toutes cartes), sans délai minimal.
 //   cards/{cardId}/private/recovery { code }                                     code de la carte, lisible par son seul propriétaire
 //   recovery/{code}                 { cardId }                                   code de secours, 10 caractères
 //
@@ -60,15 +60,14 @@ service cloud.firestore {
         return data.get(field, 0);
       }
 
-      // +1 tampon exactement sur UN seul compteur, au plus un par heure toutes cartes confondues
-      // (lastStamp commun), journalisé avec la carte tamponnée.
+      // +1 tampon exactement sur UN seul compteur, sans délai minimal entre deux tampons, journalisé
+      // avec la carte tamponnée. Le +1 exact sur la valeur stockée bloque l'envoi
+      // en double calculé sur l'ancien compteur ; le double appui après coup est bloqué par la page équipe (1 scan = 1 tampon).
       function isStamp(field, card) {
         return changedKeys().hasOnly([field, 'lastStamp', 'lastEventId'])
           && counter(resource.data, field) < 10
           && request.resource.data[field] == counter(resource.data, field) + 1
           && request.resource.data.lastStamp == request.time
-          && (resource.data.lastStamp == null
-              || request.time > resource.data.lastStamp + duration.value(1, 'h'))
           && newEvent().type == 'stamp'
           && newEvent().card == card
           && newEvent().at == request.time;
